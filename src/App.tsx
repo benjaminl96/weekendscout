@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { type FormEvent, type ReactNode, useMemo, useState } from 'react';
 import {
   CalendarDays,
   Caravan,
   Compass,
+  Edit3,
   ExternalLink,
+  HelpCircle,
   LogOut,
   Map,
   MapPin,
@@ -16,30 +18,40 @@ import {
 } from 'lucide-react';
 import { WeekendCard } from './components/WeekendCard';
 import {
+  createWeekendScoutEvent,
+  deleteWeekendScoutEvent,
   fetchCalendarEventDetails,
   fetchReadableCalendars,
   fetchPlanningEvents,
+  renameWeekendScoutEvent,
   type GoogleCalendarListEntry,
   type GoogleCalendarEvent,
 } from './lib/googleCalendar';
 import { requestCalendarAccess, revokeCalendarAccess } from './lib/googleIdentity';
+import { formatWeekendScoutTitle } from './lib/weekendScoutEvents';
 import {
   generateWeekendBlocks,
+  getWeekendCountForMonths,
   getWeekendScanRange,
   type PlanningEvent,
 } from './lib/weekendPlanner';
 import type { WeekendBlock, WeekendEvent } from './types/weekend';
 
-const WEEKEND_COUNT = 16;
+const DEFAULT_MONTHS_AHEAD = 12;
+const MIN_MONTHS_AHEAD = 1;
+const MAX_MONTHS_AHEAD = 36;
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
 export function App() {
   const today = useMemo(() => new Date(), []);
+  const [monthsAhead, setMonthsAhead] = useState(DEFAULT_MONTHS_AHEAD);
   const [accessToken, setAccessToken] = useState<string>();
   const [calendars, setCalendars] = useState<GoogleCalendarListEntry[]>([]);
   const [selectedCalendarIds, setSelectedCalendarIds] = useState<Set<string>>(new Set());
   const [calendarEvents, setCalendarEvents] = useState<PlanningEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<WeekendEvent>();
+  const [claimDraft, setClaimDraft] = useState<WeekendClaimDraft>();
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [eventDetails, setEventDetails] = useState<GoogleCalendarEvent>();
   const [eventDetailsError, setEventDetailsError] = useState<string>();
   const [isLoadingEventDetails, setIsLoadingEventDetails] = useState(false);
@@ -47,15 +59,20 @@ export function App() {
   const [error, setError] = useState<string>();
 
   const weekends = useMemo(
-    () => generateWeekendBlocks(today, WEEKEND_COUNT, calendarEvents),
-    [calendarEvents, today],
+    () =>
+      generateWeekendBlocks(
+        today,
+        getWeekendCountForMonths(today, monthsAhead),
+        calendarEvents,
+      ),
+    [calendarEvents, monthsAhead, today],
   );
-  const longWeekends = weekends.filter((weekend) => weekend.isLongWeekend);
+  const accountedWeekends = weekends.filter((weekend) => weekend.status === 'accounted');
   const openWeekends = weekends.filter(
     (weekend) => weekend.status === 'free' && !weekend.isLongWeekend,
   );
-  const otherWeekends = weekends.filter(
-    (weekend) => !weekend.isLongWeekend && weekend.status !== 'free',
+  const longWeekends = weekends.filter(
+    (weekend) => weekend.status === 'free' && weekend.isLongWeekend,
   );
   const hasCalendarData = Boolean(accessToken);
   const canConnect = Boolean(googleClientId) && !isLoading;
@@ -66,8 +83,12 @@ export function App() {
   async function loadCalendarData(
     token: string,
     calendarsToFetch: GoogleCalendarListEntry[],
+    monthsToScan = monthsAhead,
   ) {
-    const scanRange = getWeekendScanRange(today, WEEKEND_COUNT);
+    const scanRange = getWeekendScanRange(
+      today,
+      getWeekendCountForMonths(today, monthsToScan),
+    );
     const events = await fetchPlanningEvents(
       token,
       scanRange.start,
@@ -200,6 +221,121 @@ export function App() {
     }
   }
 
+  function handleMarkWeekend(weekend: WeekendBlock) {
+    setClaimDraft({ mode: 'create', weekend, name: '' });
+  }
+
+  function handleRenameWeekendScoutEvent(weekend: WeekendBlock, event: WeekendEvent) {
+    if (!event.isWeekendScoutEvent) {
+      return;
+    }
+
+    setClaimDraft({
+      mode: 'rename',
+      weekend,
+      event,
+      name: event.weekendScoutName ?? '',
+    });
+  }
+
+  async function handleSaveWeekendClaim(name: string) {
+    if (!accessToken || !claimDraft) {
+      return;
+    }
+
+    const title = formatWeekendScoutTitle(name);
+
+    setIsLoading(true);
+    setError(undefined);
+
+    try {
+      if (claimDraft.mode === 'create') {
+        await createWeekendScoutEvent(
+          accessToken,
+          title,
+          claimDraft.weekend.startDateId,
+          claimDraft.weekend.endDateId,
+        );
+      } else if (
+        claimDraft.event?.calendarId &&
+        claimDraft.event.googleEventId &&
+        claimDraft.event.isWeekendScoutEvent
+      ) {
+        await renameWeekendScoutEvent(
+          accessToken,
+          claimDraft.event.calendarId,
+          claimDraft.event.googleEventId,
+          title,
+        );
+      }
+
+      const calendarsToFetch = getCalendarsForWeekendScoutRefresh(
+        calendars,
+        selectedCalendarIds,
+      );
+
+      setSelectedCalendarIds(new Set(calendarsToFetch.map((calendar) => calendar.id)));
+      await loadCalendarData(accessToken, calendarsToFetch);
+      setClaimDraft(undefined);
+    } catch (claimError) {
+      setError(claimError instanceof Error ? claimError.message : 'Unable to save weekend.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleDeleteWeekendScoutEvent(_weekend: WeekendBlock, event: WeekendEvent) {
+    if (
+      !accessToken ||
+      !event.calendarId ||
+      !event.googleEventId ||
+      !event.isWeekendScoutEvent
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Clear "${event.weekendScoutName ?? event.title}" from Weekend Scout?`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(undefined);
+
+    try {
+      await deleteWeekendScoutEvent(accessToken, event.calendarId, event.googleEventId);
+      await loadCalendarData(accessToken, selectedCalendars);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to clear weekend.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleMonthsAheadChange(monthsValue: number) {
+    const nextMonthsAhead = clampMonthsAhead(monthsValue);
+
+    setMonthsAhead(nextMonthsAhead);
+
+    if (!accessToken) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(undefined);
+
+    try {
+      await loadCalendarData(accessToken, selectedCalendars, nextMonthsAhead);
+    } catch (rangeError) {
+      setError(rangeError instanceof Error ? rangeError.message : 'Calendar refresh failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   return (
     <main className="atlas-map min-h-screen text-ink">
       <section className="border-b border-ink/10 bg-soil/75">
@@ -275,11 +411,37 @@ export function App() {
                 <p className="text-xs text-ink/60">open weekends</p>
               </div>
               <div className="border-l-4 border-clay bg-canopy/85 px-3 py-2">
-                <p className="text-xl font-semibold">{longWeekends.length}</p>
-                <p className="text-xs text-ink/60">federal long weekends</p>
+                <p className="text-xl font-semibold">{accountedWeekends.length}</p>
+                <p className="text-xs text-ink/60">accounted for</p>
               </div>
             </div>
           ) : null}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex max-w-xs items-center gap-3 rounded-md border border-ink/10 bg-canopy/85 px-3 py-2">
+              <label className="text-xs font-semibold uppercase tracking-[0.12em] text-trail" htmlFor="months-ahead">
+                Months ahead
+              </label>
+              <input
+                className="h-9 w-20 rounded-md border border-ink/15 bg-soil/55 px-2 text-sm font-semibold text-ink outline-none focus:border-lake"
+                disabled={isLoading}
+                id="months-ahead"
+                max={MAX_MONTHS_AHEAD}
+                min={MIN_MONTHS_AHEAD}
+                onChange={(event) => handleMonthsAheadChange(Number(event.target.value))}
+                type="number"
+                value={monthsAhead}
+              />
+            </div>
+            <button
+              className="inline-flex h-11 items-center gap-2 rounded-md border border-ink/10 bg-canopy/85 px-3 text-sm font-semibold text-ink transition hover:bg-ink/10"
+              onClick={() => setIsHelpOpen(true)}
+              type="button"
+            >
+              <HelpCircle className="h-4 w-4" />
+              How this works
+            </button>
+          </div>
         </div>
       </section>
 
@@ -294,15 +456,21 @@ export function App() {
             />
             <WeekendSection
               cardColumns="two"
-              description="Weekends with calendar events already on the books."
+              description="Weekends claimed with WKSC-prefixed Google Calendar events."
+              onDeleteWeekendScoutEvent={handleDeleteWeekendScoutEvent}
+              onMarkWeekend={handleMarkWeekend}
+              onRenameWeekendScoutEvent={handleRenameWeekendScoutEvent}
               onSelectEvent={handleSelectEvent}
-              title="Scheduled Weekends"
-              weekends={otherWeekends}
+              title="Accounted For"
+              weekends={accountedWeekends}
             />
             <div className="grid gap-4 border-t border-ink/10 py-4 lg:grid-cols-2">
               <WeekendSection
                 cardColumns="one"
                 description="Friday through Monday windows with nothing currently scheduled."
+                onDeleteWeekendScoutEvent={handleDeleteWeekendScoutEvent}
+                onMarkWeekend={handleMarkWeekend}
+                onRenameWeekendScoutEvent={handleRenameWeekendScoutEvent}
                 onSelectEvent={handleSelectEvent}
                 title="Open Weekends"
                 variant="trail"
@@ -311,6 +479,9 @@ export function App() {
               <WeekendSection
                 cardColumns="one"
                 description="Federal holidays that create Friday or Monday planning windows."
+                onDeleteWeekendScoutEvent={handleDeleteWeekendScoutEvent}
+                onMarkWeekend={handleMarkWeekend}
+                onRenameWeekendScoutEvent={handleRenameWeekendScoutEvent}
                 onSelectEvent={handleSelectEvent}
                 title="Long Weekends"
                 variant="trail"
@@ -341,6 +512,17 @@ export function App() {
           onClose={handleCloseEventDetails}
         />
       ) : null}
+
+      {claimDraft ? (
+        <WeekendClaimDialog
+          draft={claimDraft}
+          isSaving={isLoading}
+          onClose={() => setClaimDraft(undefined)}
+          onSave={handleSaveWeekendClaim}
+        />
+      ) : null}
+
+      {isHelpOpen ? <HowThisWorksDialog onClose={() => setIsHelpOpen(false)} /> : null}
     </main>
   );
 }
@@ -349,6 +531,36 @@ function getDefaultSelectedCalendars(calendars: GoogleCalendarListEntry[]) {
   const selectedCalendars = calendars.filter((calendar) => calendar.selected !== false);
 
   return selectedCalendars.length > 0 ? selectedCalendars : calendars;
+}
+
+function clampMonthsAhead(monthsAhead: number) {
+  if (!Number.isFinite(monthsAhead)) {
+    return DEFAULT_MONTHS_AHEAD;
+  }
+
+  return Math.min(
+    MAX_MONTHS_AHEAD,
+    Math.max(MIN_MONTHS_AHEAD, Math.round(monthsAhead)),
+  );
+}
+
+function getCalendarsForWeekendScoutRefresh(
+  calendars: GoogleCalendarListEntry[],
+  selectedCalendarIds: Set<string>,
+) {
+  const selectedCalendars = calendars.filter((calendar) =>
+    selectedCalendarIds.has(calendar.id),
+  );
+  const primaryCalendar = calendars.find((calendar) => calendar.primary);
+
+  if (
+    primaryCalendar &&
+    !selectedCalendars.some((calendar) => calendar.id === primaryCalendar.id)
+  ) {
+    return [...selectedCalendars, primaryCalendar];
+  }
+
+  return selectedCalendars;
 }
 
 function HeaderMapScene() {
@@ -445,6 +657,9 @@ type WeekendSectionProps = {
   description: string;
   weekends: WeekendBlock[];
   onSelectEvent: (event: WeekendEvent) => void;
+  onMarkWeekend: (weekend: WeekendBlock) => void;
+  onRenameWeekendScoutEvent: (weekend: WeekendBlock, event: WeekendEvent) => void;
+  onDeleteWeekendScoutEvent: (weekend: WeekendBlock, event: WeekendEvent) => void;
   cardColumns?: 'one' | 'two';
   variant?: 'plain' | 'trail';
 };
@@ -454,6 +669,9 @@ function WeekendSection({
   description,
   weekends,
   onSelectEvent,
+  onMarkWeekend,
+  onRenameWeekendScoutEvent,
+  onDeleteWeekendScoutEvent,
   cardColumns = 'two',
   variant = 'plain',
 }: WeekendSectionProps) {
@@ -481,6 +699,9 @@ function WeekendSection({
               key={weekend.id}
               weekend={weekend}
               onSelectEvent={onSelectEvent}
+              onMarkWeekend={onMarkWeekend}
+              onRenameWeekendScoutEvent={onRenameWeekendScoutEvent}
+              onDeleteWeekendScoutEvent={onDeleteWeekendScoutEvent}
             />
           ))}
         </div>
@@ -490,6 +711,188 @@ function WeekendSection({
         </p>
       )}
     </section>
+  );
+}
+
+type WeekendClaimDraft = {
+  mode: 'create' | 'rename';
+  weekend: WeekendBlock;
+  event?: WeekendEvent;
+  name: string;
+};
+
+function HowThisWorksDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end bg-soil/75 px-3 py-3 sm:items-center sm:justify-center"
+      role="dialog"
+    >
+      <div className="max-h-[88vh] w-full max-w-2xl overflow-auto rounded-lg border border-ink/15 bg-paper shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b border-ink/10 bg-canopy/90 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-moss">Quick Guide</p>
+            <h2 className="mt-1 text-2xl font-semibold text-ink">How this works</h2>
+          </div>
+          <button
+            aria-label="Close help"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-ink/10 bg-soil/50 text-ink transition hover:bg-ink/10"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4 text-sm text-ink/75">
+          <HelpSection title="Open vs. accounted for">
+            Weekends start open by default. Regular Google Calendar events are shown
+            for context, but they do not make a weekend taken.
+          </HelpSection>
+
+          <HelpSection title="WKSC events">
+            When you mark a weekend accounted for, Weekend Scout creates an all-day
+            Google Calendar event prefixed with <strong className="text-ink">WKSC-</strong>,
+            like <strong className="text-ink">WKSC-Yellowstone Trip</strong>. Only
+            WKSC-prefixed events can be renamed or cleared from this app.
+          </HelpSection>
+
+          <HelpSection title="Long weekends">
+            Long weekends are detected from U.S. federal holidays that land on Friday
+            or Monday. They are planning signals, not automatically taken weekends.
+          </HelpSection>
+
+          <HelpSection title="Calendar filters">
+            The Calendars panel controls which Google calendars Weekend Scout scans.
+            These checkboxes only affect this app; they do not change your Google
+            Calendar sidebar settings.
+          </HelpSection>
+
+          <HelpSection title="Months ahead">
+            The months-ahead input controls how far into the future Weekend Scout
+            pulls events and generates Friday-through-Monday weekend blocks. It
+            defaults to 12 months.
+          </HelpSection>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function HelpSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-md border border-ink/10 bg-canopy/70 px-4 py-3">
+      <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-trail">
+        {title}
+      </h3>
+      <p className="mt-2 leading-6">{children}</p>
+    </section>
+  );
+}
+
+type WeekendClaimDialogProps = {
+  draft: WeekendClaimDraft;
+  isSaving: boolean;
+  onClose: () => void;
+  onSave: (name: string) => void;
+};
+
+function WeekendClaimDialog({
+  draft,
+  isSaving,
+  onClose,
+  onSave,
+}: WeekendClaimDialogProps) {
+  const [name, setName] = useState(draft.name);
+  const trimmedName = name.trim();
+  const title =
+    draft.mode === 'create' ? 'Mark Weekend Accounted For' : 'Rename Weekend';
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!trimmedName) {
+      return;
+    }
+
+    onSave(trimmedName);
+  }
+
+  return (
+    <div
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-end bg-soil/75 px-3 py-3 sm:items-center sm:justify-center"
+      role="dialog"
+    >
+      <form
+        className="w-full max-w-lg rounded-lg border border-ink/15 bg-paper shadow-xl"
+        onSubmit={handleSubmit}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-ink/10 bg-canopy/90 px-5 py-4">
+          <div>
+            <p className="text-sm font-medium text-moss">{draft.weekend.rangeLabel}</p>
+            <h2 className="mt-1 flex items-center gap-2 text-2xl font-semibold text-ink">
+              <Edit3 className="h-5 w-5" />
+              {title}
+            </h2>
+          </div>
+          <button
+            aria-label="Close"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-ink/10 bg-soil/50 text-ink transition hover:bg-ink/10"
+            onClick={onClose}
+            type="button"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-4">
+          <label className="block">
+            <span className="text-sm font-semibold text-ink">Weekend name</span>
+            <input
+              autoFocus
+              className="mt-2 h-11 w-full rounded-md border border-ink/15 bg-soil/55 px-3 text-sm text-ink outline-none focus:border-lake"
+              disabled={isSaving}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Yellowstone Trip"
+              value={name}
+            />
+          </label>
+
+          <p className="rounded-md border border-trail/20 bg-canopy/60 px-3 py-2 text-xs text-ink/65">
+            Weekend Scout will save this to Google Calendar as{' '}
+            <span className="font-semibold text-ink">
+              {trimmedName ? formatWeekendScoutTitle(trimmedName) : 'WKSC-...'}
+            </span>
+            . Only WKSC-prefixed events can be renamed or cleared here.
+          </p>
+
+          <div className="flex justify-end gap-2">
+            <button
+              className="rounded-md border border-ink/10 bg-soil/50 px-4 py-2 text-sm font-semibold text-ink transition hover:bg-ink/10"
+              disabled={isSaving}
+              onClick={onClose}
+              type="button"
+            >
+              Cancel
+            </button>
+            <button
+              className="rounded-md bg-ink px-4 py-2 text-sm font-semibold text-soil transition hover:bg-ink/90 disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={isSaving || !trimmedName}
+              type="submit"
+            >
+              {isSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
   );
 }
 

@@ -13,6 +13,12 @@ export function addDays(date: Date, days: number) {
   return nextDate;
 }
 
+export function addMonths(date: Date, months: number) {
+  const nextDate = new Date(date);
+  nextDate.setMonth(nextDate.getMonth() + months);
+  return nextDate;
+}
+
 export function toDateId(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -80,6 +86,14 @@ export function findUpcomingFriday(fromDate: Date) {
   const daysUntilFriday = (5 - date.getDay() + 7) % 7;
 
   return addDays(date, daysUntilFriday);
+}
+
+export function differenceInCalendarDays(startDate: Date, endDate: Date) {
+  const millisecondsPerDay = 1000 * 60 * 60 * 24;
+  const start = startOfDay(startDate).getTime();
+  const end = startOfDay(endDate).getTime();
+
+  return Math.max(0, Math.ceil((end - start) / millisecondsPerDay));
 }
 
 export function isSameDate(left: Date, right: Date) {

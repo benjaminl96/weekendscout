@@ -1,30 +1,34 @@
-import { CalendarClock, CheckCircle2, CircleAlert, Sparkles } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Sparkles } from 'lucide-react';
 import type { WeekendBlock, WeekendEvent } from '../types/weekend';
 
 type WeekendCardProps = {
   weekend: WeekendBlock;
   onSelectEvent: (event: WeekendEvent) => void;
+  onMarkWeekend: (weekend: WeekendBlock) => void;
+  onRenameWeekendScoutEvent: (weekend: WeekendBlock, event: WeekendEvent) => void;
+  onDeleteWeekendScoutEvent: (weekend: WeekendBlock, event: WeekendEvent) => void;
 };
 
 const statusStyles = {
   free: {
-    label: 'Free',
+    label: 'Open',
     className: 'bg-moss/15 text-moss ring-moss/25',
     icon: CheckCircle2,
   },
-  light: {
-    label: 'Light',
-    className: 'bg-lake/15 text-lake ring-lake/25',
-    icon: CalendarClock,
-  },
-  busy: {
-    label: 'Busy',
+  accounted: {
+    label: 'Accounted',
     className: 'bg-clay/20 text-ink ring-clay/30',
-    icon: CircleAlert,
+    icon: CalendarClock,
   },
 };
 
-export function WeekendCard({ weekend, onSelectEvent }: WeekendCardProps) {
+export function WeekendCard({
+  weekend,
+  onSelectEvent,
+  onMarkWeekend,
+  onRenameWeekendScoutEvent,
+  onDeleteWeekendScoutEvent,
+}: WeekendCardProps) {
   const status = statusStyles[weekend.status];
   const StatusIcon = status.icon;
 
@@ -51,6 +55,39 @@ export function WeekendCard({ weekend, onSelectEvent }: WeekendCardProps) {
         </span>
       </div>
 
+      <div className="mt-3 flex flex-wrap gap-2">
+        {weekend.weekendScoutEvent ? (
+          <>
+            <button
+              className="rounded-md border border-ink/10 bg-soil/45 px-2.5 py-1 text-xs font-semibold text-ink transition hover:bg-ink/10"
+              onClick={() =>
+                onRenameWeekendScoutEvent(weekend, weekend.weekendScoutEvent!)
+              }
+              type="button"
+            >
+              Rename
+            </button>
+            <button
+              className="rounded-md border border-clay/35 bg-clay/10 px-2.5 py-1 text-xs font-semibold text-clay transition hover:bg-clay/20"
+              onClick={() =>
+                onDeleteWeekendScoutEvent(weekend, weekend.weekendScoutEvent!)
+              }
+              type="button"
+            >
+              Clear
+            </button>
+          </>
+        ) : (
+          <button
+            className="rounded-md border border-moss/35 bg-moss/10 px-2.5 py-1 text-xs font-semibold text-moss transition hover:bg-moss/20"
+            onClick={() => onMarkWeekend(weekend)}
+            type="button"
+          >
+            Mark accounted for
+          </button>
+        )}
+      </div>
+
       <div className="mt-3 max-h-[10.5rem] space-y-2 overflow-y-auto pr-1">
         {weekend.events.length === 0 ? (
           <p className="rounded-md border border-dashed border-moss/35 bg-moss/10 px-3 py-2 text-xs text-ink/65">
@@ -69,6 +106,8 @@ export function WeekendCard({ weekend, onSelectEvent }: WeekendCardProps) {
               className={`grid w-full grid-cols-[3.4rem_1fr] gap-2 rounded-md border px-2.5 py-2 ${
                 event.kind === 'holiday'
                   ? 'border-sun/35 bg-sun/10 text-left'
+                  : event.isWeekendScoutEvent
+                    ? 'border-clay/40 bg-clay/15 text-left transition hover:border-clay/60 hover:bg-clay/20'
                   : 'border-ink/10 bg-soil/35 text-left transition hover:border-lake/45 hover:bg-lake/10 disabled:cursor-default disabled:hover:border-sun/35 disabled:hover:bg-sun/10'
               }`}
             >
@@ -77,7 +116,11 @@ export function WeekendCard({ weekend, onSelectEvent }: WeekendCardProps) {
                 <p className="text-[11px] leading-4 text-ink/45">{event.time}</p>
               </div>
               <div>
-                <p className="line-clamp-1 text-xs font-medium text-ink">{event.title}</p>
+                <p className="line-clamp-1 text-xs font-medium text-ink">
+                  {event.isWeekendScoutEvent
+                    ? event.weekendScoutName
+                    : event.title}
+                </p>
                 <p className="line-clamp-1 text-[11px] text-ink/45">{event.calendarName}</p>
               </div>
             </button>

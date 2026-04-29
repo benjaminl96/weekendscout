@@ -1,6 +1,8 @@
 import type { WeekendBlock, WeekendEvent } from '../types/weekend';
 import {
   addDays,
+  addMonths,
+  differenceInCalendarDays,
   findUpcomingFriday,
   formatDateWithOrdinal,
   formatWeekendRange,
@@ -9,6 +11,7 @@ import {
   toDateId,
 } from './dateUtils';
 import { getLongWeekendHoliday } from './federalHolidays';
+import { getWeekendScoutName, isWeekendScoutTitle } from './weekendScoutEvents';
 
 export type PlanningEvent = {
   id: string;
@@ -29,19 +32,24 @@ export function generateWeekendBlocks(
 
   return Array.from({ length: weekendCount }, (_, index) => {
     const friday = addDays(firstFriday, index * 7);
+    const endDate = addDays(friday, 4);
     const holiday = getLongWeekendHoliday(friday);
     const holidayEvent = holiday ? toHolidayWeekendEvent(holiday.name, holiday.date) : undefined;
     const weekendEvents = events
       .filter((event) => isDateInWeekendBlock(event.date, friday))
       .map(toWeekendEvent);
+    const weekendScoutEvent = weekendEvents.find((event) => event.isWeekendScoutEvent);
     const allEvents = holidayEvent ? [...weekendEvents, holidayEvent] : weekendEvents;
 
     return {
       id: toDateId(friday),
-      title: holiday ? `${holiday.name} weekend` : getDefaultWeekendTitle(friday, allEvents),
+      startDateId: toDateId(friday),
+      endDateId: toDateId(endDate),
+      title: getWeekendTitle(friday, allEvents, weekendScoutEvent, holiday?.name),
       rangeLabel: formatWeekendRange(friday),
-      status: getWeekendStatus(weekendEvents.length),
+      status: weekendScoutEvent ? 'accounted' : 'free',
       events: allEvents,
+      weekendScoutEvent,
       holidayName: holiday?.name,
       isLongWeekend: Boolean(holiday),
     };
@@ -57,30 +65,35 @@ export function getWeekendScanRange(fromDate: Date, weekendCount: number) {
   };
 }
 
-function getDefaultWeekendTitle(friday: Date, events: WeekendEvent[]) {
+export function getWeekendCountForMonths(fromDate: Date, monthsAhead: number) {
+  const firstFriday = findUpcomingFriday(fromDate);
+  const scanEnd = addMonths(fromDate, monthsAhead);
+  const daysToScan = differenceInCalendarDays(firstFriday, scanEnd);
+
+  return Math.max(1, Math.ceil(daysToScan / 7));
+}
+
+function getWeekendTitle(
+  friday: Date,
+  events: WeekendEvent[],
+  weekendScoutEvent?: WeekendEvent,
+  holidayName?: string,
+) {
   const fridayLabel = formatDateWithOrdinal(friday);
+
+  if (weekendScoutEvent?.weekendScoutName) {
+    return weekendScoutEvent.weekendScoutName;
+  }
+
+  if (holidayName) {
+    return `${holidayName} weekend`;
+  }
 
   if (events.length === 0) {
     return `${fridayLabel} open weekend`;
   }
 
-  if (events.length === 1) {
-    return `${fridayLabel} mostly clear`;
-  }
-
-  return `${fridayLabel} weekend`;
-}
-
-function getWeekendStatus(calendarEventCount: number) {
-  if (calendarEventCount === 0) {
-    return 'free';
-  }
-
-  if (calendarEventCount <= 1) {
-    return 'light';
-  }
-
-  return 'busy';
+  return `${fridayLabel} open weekend`;
 }
 
 function toWeekendEvent(event: PlanningEvent): WeekendEvent {
@@ -99,6 +112,10 @@ function toWeekendEvent(event: PlanningEvent): WeekendEvent {
     title: event.title,
     calendarName: event.calendarName,
     kind: 'calendar',
+    isWeekendScoutEvent: isWeekendScoutTitle(event.title),
+    weekendScoutName: isWeekendScoutTitle(event.title)
+      ? getWeekendScoutName(event.title)
+      : undefined,
   };
 }
 

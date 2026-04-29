@@ -1,4 +1,5 @@
 import { parseDateOnly } from './dateUtils';
+import { isWeekendScoutTitle } from './weekendScoutEvents';
 import type { PlanningEvent } from './weekendPlanner';
 
 export const CALENDAR_READONLY_SCOPE =
@@ -132,6 +133,90 @@ export async function fetchCalendarEventDetails(
   }
 
   return (await response.json()) as GoogleCalendarEvent;
+}
+
+export async function createWeekendScoutEvent(
+  accessToken: string,
+  summary: string,
+  startDateId: string,
+  endDateId: string,
+) {
+  if (!isWeekendScoutTitle(summary)) {
+    throw new Error('Weekend Scout can only create WKSC-prefixed events.');
+  }
+
+  const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/calendars/primary/events`, {
+    body: JSON.stringify({
+      summary,
+      description: 'Created by Weekend Scout.',
+      start: { date: startDateId },
+      end: { date: endDateId },
+    }),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    throw new Error('Unable to create Weekend Scout event.');
+  }
+
+  return (await response.json()) as GoogleCalendarEvent;
+}
+
+export async function renameWeekendScoutEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+  summary: string,
+) {
+  if (!isWeekendScoutTitle(summary)) {
+    throw new Error('Weekend Scout can only rename WKSC-prefixed events.');
+  }
+
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(
+      calendarId,
+    )}/events/${encodeURIComponent(eventId)}`,
+    {
+      body: JSON.stringify({ summary }),
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      method: 'PATCH',
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Unable to rename Weekend Scout event.');
+  }
+
+  return (await response.json()) as GoogleCalendarEvent;
+}
+
+export async function deleteWeekendScoutEvent(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+) {
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(
+      calendarId,
+    )}/events/${encodeURIComponent(eventId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      method: 'DELETE',
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Unable to delete Weekend Scout event.');
+  }
 }
 
 export async function fetchPlanningEvents(

@@ -1,4 +1,4 @@
-export type WeekendStatus = 'free' | 'light' | 'busy';
+export type WeekendStatus = 'free' | 'accounted';
 
 export type WeekendEvent = {
   id: string;
@@ -9,14 +9,19 @@ export type WeekendEvent = {
   title: string;
   calendarName: string;
   kind?: 'calendar' | 'holiday';
+  isWeekendScoutEvent?: boolean;
+  weekendScoutName?: string;
 };
 
 export type WeekendBlock = {
   id: string;
+  startDateId: string;
+  endDateId: string;
   title: string;
   rangeLabel: string;
   status: WeekendStatus;
   events: WeekendEvent[];
+  weekendScoutEvent?: WeekendEvent;
   holidayName?: string;
   isLongWeekend: boolean;
 };

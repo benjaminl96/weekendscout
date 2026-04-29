@@ -1,4 +1,4 @@
-import { CALENDAR_READONLY_SCOPE } from './googleCalendar';
+import { CALENDAR_EVENTS_SCOPE, CALENDAR_READONLY_SCOPE } from './googleCalendar';
 
 const GOOGLE_IDENTITY_SCRIPT_SRC = 'https://accounts.google.com/gsi/client';
 
@@ -69,7 +69,7 @@ export async function requestCalendarAccess(clientId: string) {
   return new Promise<string>((resolve, reject) => {
     const tokenClient = window.google?.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: CALENDAR_READONLY_SCOPE,
+      scope: `${CALENDAR_READONLY_SCOPE} ${CALENDAR_EVENTS_SCOPE}`,
       callback: (response) => {
         if (response.error || !response.access_token) {
           reject(new Error(response.error_description ?? response.error ?? 'Google authorization failed.'));
