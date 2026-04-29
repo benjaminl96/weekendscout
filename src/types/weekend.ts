@@ -2,6 +2,8 @@ export type WeekendStatus = 'free' | 'light' | 'busy';
 
 export type WeekendEvent = {
   id: string;
+  googleEventId?: string;
+  calendarId?: string;
   day: 'Fri' | 'Sat' | 'Sun' | 'Mon';
   time: string;
   title: string;

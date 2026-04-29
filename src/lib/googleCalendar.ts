@@ -21,6 +21,24 @@ export type GoogleCalendarEvent = {
   id: string;
   status?: string;
   summary?: string;
+  description?: string;
+  location?: string;
+  htmlLink?: string;
+  hangoutLink?: string;
+  creator?: {
+    email?: string;
+    displayName?: string;
+  };
+  organizer?: {
+    email?: string;
+    displayName?: string;
+  };
+  attendees?: {
+    email?: string;
+    displayName?: string;
+    responseStatus?: string;
+    optional?: boolean;
+  }[];
   start: {
     date?: string;
     dateTime?: string;
@@ -43,7 +61,7 @@ type EventsResponse = {
 
 const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 
-export async function fetchVisibleCalendars(accessToken: string) {
+export async function fetchReadableCalendars(accessToken: string) {
   const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}/users/me/calendarList`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -93,14 +111,38 @@ export async function fetchCalendarEvents(
   return data.items ?? [];
 }
 
+export async function fetchCalendarEventDetails(
+  accessToken: string,
+  calendarId: string,
+  eventId: string,
+) {
+  const response = await fetch(
+    `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(
+      calendarId,
+    )}/events/${encodeURIComponent(eventId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error('Unable to load this event from Google Calendar.');
+  }
+
+  return (await response.json()) as GoogleCalendarEvent;
+}
+
 export async function fetchPlanningEvents(
   accessToken: string,
   timeMin: Date,
   timeMax: Date,
+  calendars?: GoogleCalendarListEntry[],
 ) {
-  const calendars = await fetchVisibleCalendars(accessToken);
+  const calendarsToFetch = calendars ?? (await fetchReadableCalendars(accessToken));
   const eventGroups = await Promise.allSettled(
-    calendars.map(async (calendar) => {
+    calendarsToFetch.map(async (calendar) => {
       const events = await fetchCalendarEvents(
         accessToken,
         calendar.id,
@@ -128,6 +170,8 @@ function toPlanningEvent(
 
   return {
     id: `${calendar.id}-${event.id}`,
+    googleEventId: event.id,
+    calendarId: calendar.id,
     date: startDate,
     time,
     title: event.summary ?? 'Busy',

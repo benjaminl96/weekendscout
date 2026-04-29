@@ -38,6 +38,29 @@ export function formatShortDate(date: Date) {
   }).format(date);
 }
 
+export function formatDateWithOrdinal(date: Date) {
+  return `${date.toLocaleDateString('en-US', {
+    month: 'long',
+  })} ${date.getDate()}${getOrdinalSuffix(date.getDate())}`;
+}
+
+function getOrdinalSuffix(day: number) {
+  if (day >= 11 && day <= 13) {
+    return 'th';
+  }
+
+  switch (day % 10) {
+    case 1:
+      return 'st';
+    case 2:
+      return 'nd';
+    case 3:
+      return 'rd';
+    default:
+      return 'th';
+  }
+}
+
 export function formatWeekendRange(friday: Date) {
   const monday = addDays(friday, 3);
 

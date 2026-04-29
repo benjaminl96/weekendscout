@@ -2,6 +2,7 @@ import type { WeekendBlock, WeekendEvent } from '../types/weekend';
 import {
   addDays,
   findUpcomingFriday,
+  formatDateWithOrdinal,
   formatWeekendRange,
   getWeekendDayLabel,
   isDateInWeekendBlock,
@@ -11,6 +12,8 @@ import { getLongWeekendHoliday } from './federalHolidays';
 
 export type PlanningEvent = {
   id: string;
+  googleEventId: string;
+  calendarId: string;
   date: Date;
   time: string;
   title: string;
@@ -55,15 +58,17 @@ export function getWeekendScanRange(fromDate: Date, weekendCount: number) {
 }
 
 function getDefaultWeekendTitle(friday: Date, events: WeekendEvent[]) {
+  const fridayLabel = formatDateWithOrdinal(friday);
+
   if (events.length === 0) {
-    return 'Open weekend';
+    return `${fridayLabel} open weekend`;
   }
 
   if (events.length === 1) {
-    return 'Mostly clear';
+    return `${fridayLabel} mostly clear`;
   }
 
-  return `${friday.toLocaleDateString('en-US', { month: 'long' })} weekend`;
+  return `${fridayLabel} weekend`;
 }
 
 function getWeekendStatus(calendarEventCount: number) {
@@ -87,6 +92,8 @@ function toWeekendEvent(event: PlanningEvent): WeekendEvent {
 
   return {
     id: event.id,
+    googleEventId: event.googleEventId,
+    calendarId: event.calendarId,
     day,
     time: event.time,
     title: event.title,
