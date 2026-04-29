@@ -1,0 +1,165 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #24302b;
+  background: #f7f1e4;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.atlas-map {
+  background-color: #f7f1e4;
+  background-image:
+    linear-gradient(rgba(47, 113, 133, 0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(47, 113, 133, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 18% 25%, rgba(216, 148, 60, 0.22), transparent 28%),
+    radial-gradient(circle at 83% 20%, rgba(79, 117, 84, 0.18), transparent 24%);
+  background-size:
+    44px 44px,
+    44px 44px,
+    auto,
+    auto;
+}
+
+.map-scene {
+  position: relative;
+  min-height: 210px;
+  overflow: hidden;
+  border: 1px solid rgba(36, 48, 43, 0.12);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 28% 18%, rgba(255, 255, 255, 0.8), transparent 16%),
+    linear-gradient(145deg, rgba(247, 241, 228, 0.96), rgba(235, 224, 202, 0.94));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+.map-scene::before {
+  position: absolute;
+  inset: 18px;
+  content: "";
+  border: 2px dashed rgba(123, 102, 81, 0.35);
+  border-radius: 48% 42% 44% 50%;
+  transform: rotate(-8deg);
+}
+
+.map-route {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  top: 52%;
+  height: 42px;
+  border-top: 4px solid rgba(184, 95, 62, 0.75);
+  border-radius: 50%;
+  transform: rotate(-8deg);
+}
+
+.map-lake {
+  position: absolute;
+  right: 10%;
+  top: 24%;
+  width: 96px;
+  height: 58px;
+  border-radius: 54% 46% 60% 40%;
+  background: rgba(47, 113, 133, 0.2);
+  border: 1px solid rgba(47, 113, 133, 0.22);
+}
+
+.map-rv {
+  position: absolute;
+  bottom: 38px;
+  left: 22%;
+  width: 96px;
+  height: 48px;
+  border: 2px solid #24302b;
+  border-radius: 14px 18px 10px 10px;
+  background: #fff7e8;
+  box-shadow: 7px 7px 0 rgba(36, 48, 43, 0.08);
+}
+
+.map-rv::before {
+  position: absolute;
+  left: 14px;
+  top: 10px;
+  width: 24px;
+  height: 16px;
+  content: "";
+  border: 2px solid #24302b;
+  border-radius: 5px;
+  background: rgba(47, 113, 133, 0.22);
+}
+
+.map-rv::after {
+  position: absolute;
+  right: 15px;
+  top: 12px;
+  width: 22px;
+  height: 20px;
+  content: "";
+  border-radius: 4px;
+  background: #d8943c;
+}
+
+.map-rv-small {
+  left: auto;
+  right: 20%;
+  bottom: 72px;
+  width: 58px;
+  height: 31px;
+  border-radius: 10px 12px 8px 8px;
+  transform: rotate(-7deg);
+}
+
+.map-rv-small::before {
+  left: 9px;
+  top: 7px;
+  width: 14px;
+  height: 10px;
+  border-width: 1px;
+  border-radius: 3px;
+}
+
+.map-rv-small::after {
+  right: 8px;
+  top: 8px;
+  width: 12px;
+  height: 12px;
+}
+
+.map-wheel {
+  position: absolute;
+  bottom: -8px;
+  width: 15px;
+  height: 15px;
+  border: 2px solid #24302b;
+  border-radius: 999px;
+  background: #f7f1e4;
+}
+
+.map-wheel-left {
+  left: 18px;
+}
+
+.map-wheel-right {
+  right: 18px;
+}
